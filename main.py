@@ -1,3 +1,4 @@
+import dataclasses
 import itertools
 import logging
 import os
@@ -5,15 +6,17 @@ import shutil
 import threading
 from pathlib import Path
 from queue import Queue
-import dataclasses
 from typing import Tuple
 
 import cv2
 import numpy as np
 
-
 Image = np.array
 PathT = str | Path
+
+PATH_TO_IMAGE = './data/image.png'
+PATH_TO_VIDEO = './data/video.avi'
+OUT_DIR = './processed'
 
 
 @dataclasses.dataclass
@@ -138,10 +141,12 @@ def main(video_path: str, template_path: str, out_dir: str, threshold: float):
 
     # reader = ThreadA(video_path, q1, name='reader')
     reader = threading.Thread(target=read_video, args=[video_path, q1], name='reader')
+    # Disable this ^ and enable class ThreadA to use old version
 
     template = read_image(template_path)
     # processor = ThreadB(q1, q2, template, threshold, name='processor')
     processor = threading.Thread(target=match_images, args=[q1, q2, template, threshold], name='processor')
+    # Disable this ^ and enable class ThreadB to use old version
 
     reader.start()
     processor.start()
@@ -151,4 +156,4 @@ def main(video_path: str, template_path: str, out_dir: str, threshold: float):
 
 if __name__ == '__main__':
     logging.basicConfig(level=logging.INFO)
-    main('./data/video.avi', './data/image.png', './processed', threshold=0.99)
+    main(PATH_TO_VIDEO, PATH_TO_IMAGE, OUT_DIR, threshold=0.99)
