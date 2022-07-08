@@ -12,9 +12,6 @@ import cv2
 import numpy as np
 
 
-THRESHOLD = 0.99
-
-
 Image = np.array
 PathT = str | Path
 
@@ -47,7 +44,7 @@ def read_video(path: str, queue: Queue) -> None:
         ret, frame = video_capture.read()
         if not ret or frame is None or not video_capture.isOpened():
             break
-        logging.debug(f'put frame {i}')
+        logging.debug(f'putting frame {i}')
         queue.put(frame)
 
     video_capture.release()
@@ -60,7 +57,7 @@ def save_image(image: Image, filename: str) -> None:
 
 def find_position(frame: Image, image: Image, threshold: float = 1.0) -> Vector:
     result = cv2.matchTemplate(frame, image, cv2.TM_CCOEFF_NORMED)
-    location = np.where(result >= threshold)
+    location = (result >= threshold).nonzero()
     for pt in zip(*location[::-1]):  # switch columns and rows
         logging.debug(f'image position is {pt}')
         return Vector(*pt)
@@ -68,7 +65,6 @@ def find_position(frame: Image, image: Image, threshold: float = 1.0) -> Vector:
 
 
 def draw_rectangle(image: Image, point1: Vector, point2: Vector) -> Image:
-    # logging.log()
     return cv2.rectangle(image, dataclasses.astuple(point1), dataclasses.astuple(point2), (0, 0, 255), 2)
 
 
@@ -113,36 +109,39 @@ def save_images(producer_queue: Queue, out_dir: PathT):
         producer_queue.task_done()
 
 
-class ThreadA(threading.Thread):
-    def __init__(self, path: str, consumer_queue: Queue, *args, **kwargs):
-        self._path = path
-        self._consumer_queue = consumer_queue
-        super().__init__(*args, **kwargs)
-
-    def run(self) -> None:
-        logging.debug(f'{self.__class__.__name__} started')
-        read_video(self._path, self._consumer_queue)
-
-
-class ThreadB(threading.Thread):
-    def __init__(self, producer_queue: Queue, consumer_queue: Queue, template: Image, *args, **kwargs):
-        self._producer_queue = producer_queue
-        self._consumer_queue = consumer_queue
-        self._template = template
-        super().__init__(*args, **kwargs)
-
-    def run(self):
-        logging.debug(f'{self.__class__.__name__} started')
-        return match_images(self._producer_queue, self._consumer_queue, self._template, THRESHOLD)
+# class ThreadA(threading.Thread):
+#     def __init__(self, path: str, consumer_queue: Queue, *args, **kwargs):
+#         self._path = path
+#         self._consumer_queue = consumer_queue
+#         super().__init__(*args, **kwargs)
+#
+#     def run(self) -> None:
+#         logging.debug(f'{self.__class__.__name__} started')
+#         read_video(self._path, self._consumer_queue)
 
 
-def main(video_path: str, template_path: str, out_dir: str):
+# class ThreadB(threading.Thread):
+#     def __init__(self, producer_queue: Queue, consumer_queue: Queue, template: Image, threshold: float, *args, **kwargs):
+#         self._producer_queue = producer_queue
+#         self._consumer_queue = consumer_queue
+#         self._template = template
+#         self._threshold = threshold
+#         super().__init__(*args, **kwargs)
+#
+#     def run(self):
+#         logging.debug(f'{self.__class__.__name__} started')
+#         return match_images(self._producer_queue, self._consumer_queue, self._template, self._threshold)
+
+
+def main(video_path: str, template_path: str, out_dir: str, threshold: float):
     q1, q2 = Queue(), Queue()
 
-    reader = ThreadA(video_path, q1, name='reader')
+    # reader = ThreadA(video_path, q1, name='reader')
+    reader = threading.Thread(target=read_video, args=[video_path, q1], name='reader')
 
     template = read_image(template_path)
-    processor = ThreadB(q1, q2, template, name='processor')
+    # processor = ThreadB(q1, q2, template, threshold, name='processor')
+    processor = threading.Thread(target=match_images, args=[q1, q2, template, threshold], name='processor')
 
     reader.start()
     processor.start()
@@ -152,4 +151,4 @@ def main(video_path: str, template_path: str, out_dir: str):
 
 if __name__ == '__main__':
     logging.basicConfig(level=logging.INFO)
-    main('./data/video.avi', './data/image.png', './processed')
+    main('./data/video.avi', './data/image.png', './processed', threshold=0.99)
